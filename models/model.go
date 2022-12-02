@@ -4,9 +4,10 @@ type User struct {
 	UserName string `json:"user_name" db:"user_name"`
 	Password string `json:"password" db:"password"`
 	Balance  string `json:"balance" db:"balance"`
+	Activity int    `db:"activity"`
 }
 type Request struct {
-	RecipientUsername string `json:"url"`
+	RecipientUsername string `json:"recipient_username"`
 	Amount            string `json:"amount"`
 }
 type Users struct {

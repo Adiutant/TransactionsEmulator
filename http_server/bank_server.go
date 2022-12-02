@@ -23,7 +23,8 @@ func (s *BankServer) auth(c *gin.Context) {
 	}
 	getUser, err, ok := s.Engine.DbHelper.GetUser(user)
 	if err != nil {
-		c.Abort()
+		s.logger.Error(err)
+		c.AbortWithError(http.StatusUnauthorized, err)
 		return
 	}
 	if !ok {
@@ -66,7 +67,7 @@ func (s *BankServer) SetRoutes() {
 		user, _, _ := context.Request.BasicAuth()
 		defer func() { delete(s.Engine.Users.UsersList, user) }()
 		userInfo := s.Engine.Users.UsersList[user]
-		err := context.BindJSON(req)
+		err := context.BindJSON(&req)
 		if err != nil {
 			s.logger.Error(err)
 			context.AbortWithError(http.StatusBadRequest, err)
