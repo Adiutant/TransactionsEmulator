@@ -2,7 +2,9 @@ CREATE TABLE IF NOT EXISTS Users (
                                      user_name text NOT NULL PRIMARY KEY,
                                      password text,
                                      balance text,
-                                     activity int
+                                     activity int,
+                                     bankCountryCode text,
+                                     bankName text
 );
 CREATE TABLE IF NOT EXISTS Transactions(
                                            id serial NOT NULL PRIMARY KEY,

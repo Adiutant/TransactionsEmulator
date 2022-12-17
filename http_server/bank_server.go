@@ -3,16 +3,21 @@ package http_server
 import (
 	"TestBank/engine"
 	"TestBank/models"
+	"TestBank/utils"
+	"crypto/md5"
 	"github.com/gin-gonic/gin"
 	"github.com/shopspring/decimal"
 	"github.com/sirupsen/logrus"
 	"net/http"
+	"time"
 )
 
 type BankServer struct {
-	HttpEngine *gin.Engine
-	Engine     *engine.BankEngine
-	logger     *logrus.Logger
+	HttpEngine   *gin.Engine
+	Engine       *engine.BankEngine
+	logger       *logrus.Logger
+	queue        []models.TransactionInfo
+	processTimer *time.Timer
 }
 
 func (s *BankServer) auth(c *gin.Context) {
@@ -45,9 +50,11 @@ func NewBankServer() (*BankServer, error) {
 		return nil, err
 	}
 	server := BankServer{
-		HttpEngine: gin.Default(),
-		Engine:     bankEngine,
-		logger:     logrus.New(),
+		HttpEngine:   gin.Default(),
+		Engine:       bankEngine,
+		logger:       logrus.New(),
+		queue:        make([]models.TransactionInfo, 0),
+		processTimer: time.NewTimer(time.Second),
 	}
 	return &server, nil
 }
@@ -60,7 +67,31 @@ func (s *BankServer) Run() error {
 	return nil
 }
 
+func (s *BankServer) processTransactions() {
+	for {
+		if len(s.queue) == 0 {
+			continue
+		}
+		select {
+		case <-s.processTimer.C:
+			prioritized, err := utils.Prioritize(s.queue, 1000)
+			if err != nil {
+				panic(err)
+			}
+			for _, tx := range prioritized {
+				ok, err := s.Engine.DbHelper.ExecuteTransaction(*tx.TransactionRef)
+				if err != nil || !ok {
+					s.logger.Error(err)
+					return
+				}
+			}
+		}
+	}
+
+}
+
 func (s *BankServer) SetRoutes() {
+	go s.processTransactions()
 	s.HttpEngine.Use(s.auth).POST("/transact", func(context *gin.Context) {
 		var req models.Request
 		var transaction models.Transaction
@@ -116,14 +147,17 @@ func (s *BankServer) SetRoutes() {
 			context.AbortWithStatus(http.StatusMethodNotAllowed)
 			return
 		}
+
 		transaction.SResultBalance = sBalanceVal.Sub(amountVal).String()
 		transaction.RResultBalance = rBalanceVal.Add(amountVal).String()
-		ok, err = s.Engine.DbHelper.ExecuteTransaction(transaction)
-		if err != nil || !ok {
-			s.logger.Error(err)
-			context.AbortWithError(http.StatusInternalServerError, err)
-			return
-		}
+		hashIn := md5.Sum([]byte(transaction.Recipient + transaction.Sender + transaction.Amount))
+		s.queue = append(s.queue, models.TransactionInfo{
+			ID:              string(hashIn[:]),
+			Amount:          transaction.Amount,
+			BankName:        s.Engine.Users.UsersList[user].BankName,
+			BankCountryCode: s.Engine.Users.UsersList[user].BankCountryCode,
+			TransactionRef:  &transaction,
+		})
 
 	})
 

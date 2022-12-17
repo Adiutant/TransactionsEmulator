@@ -1,10 +1,14 @@
 package models
 
+import "github.com/shopspring/decimal"
+
 type User struct {
-	UserName string `json:"user_name" db:"user_name"`
-	Password string `json:"password" db:"password"`
-	Balance  string `json:"balance" db:"balance"`
-	Activity int    `db:"activity"`
+	UserName        string `json:"user_name" db:"user_name"`
+	Password        string `json:"password" db:"password"`
+	Balance         string `json:"balance" db:"balance"`
+	BankName        string `json:"bankName" db:"bankName"`
+	BankCountryCode string `json:"bankCountryCode" db:"bankCountryCode"`
+	Activity        int    `db:"activity"`
 }
 type Request struct {
 	RecipientUsername string `json:"recipient_username"`
@@ -22,4 +26,61 @@ type Transaction struct {
 	RBalance       string `db:"recipient_balance"`
 	RResultBalance string `db:"recipient_result_balance"`
 	Amount         string `db:"amount"`
+}
+
+type Interface interface {
+	Len() int
+	Less(i, j int) bool
+	Swap(i, j int)
+}
+type TransactionInfo struct {
+	// a UUID of transaction
+	ID string
+	// in USD, typically a value between "0.01" and "1000" USD.
+	Amount string
+	// bank name, e.g. "Bank of Scotland"
+	BankName string
+	// a 2-letter country code of where the bank is located
+	BankCountryCode string
+
+	TransactionRef *Transaction
+}
+type Transactions struct {
+	TxList    []TransactionInfo
+	Latencies map[string]int
+}
+
+func (tx Transactions) Len() int {
+	return len(tx.TxList)
+}
+func (tx Transactions) Less(i, j int) bool {
+	firstAmount, err := decimal.NewFromString(tx.TxList[i].Amount)
+	if err != nil {
+		return false
+	}
+	secondAmount, err := decimal.NewFromString(tx.TxList[j].Amount)
+	if err != nil {
+		return false
+	}
+	return firstAmount.Div(decimal.NewFromInt(int64(tx.Latencies[tx.TxList[i].BankCountryCode]))).LessThan(secondAmount.Div(decimal.NewFromInt(int64(tx.Latencies[tx.TxList[j].BankCountryCode]))))
+}
+
+type FraudDetectionResult struct {
+	TransactionID string
+	IsFraudulent  bool
+}
+
+func (tx Transactions) Swap(i, j int) {
+	tx.TxList[i], tx.TxList[j] = tx.TxList[j], tx.TxList[i]
+}
+
+type FraudDetectionResults []FraudDetectionResult
+
+func Sum(array []TransactionInfo) string {
+	result := decimal.NewFromInt(0)
+	for _, v := range array {
+		amountVal, _ := decimal.NewFromString(v.Amount)
+		result = result.Add(amountVal)
+	}
+	return result.String()
 }
