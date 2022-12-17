@@ -85,6 +85,7 @@ func (s *BankServer) processTransactions() {
 					return
 				}
 			}
+			s.queue = make([]models.TransactionInfo, 0)
 		}
 	}
 
