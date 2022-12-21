@@ -2,12 +2,13 @@ package models
 
 import "github.com/shopspring/decimal"
 
+//INSERT INTO USERS(user_name, password, balance, activity, bank_country_code, bank_name) VALUES ('test1', 'pass', '10000',0, 'ru', 'sberbank');
 type User struct {
 	UserName        string `json:"user_name" db:"user_name"`
 	Password        string `json:"password" db:"password"`
 	Balance         string `json:"balance" db:"balance"`
-	BankName        string `json:"bankName" db:"bankName"`
-	BankCountryCode string `json:"bankCountryCode" db:"bankCountryCode"`
+	BankName        string `json:"bank_name" db:"bank_name"`
+	BankCountryCode string `json:"bank_country_code" db:"bank_country_code"`
 	Activity        int    `db:"activity"`
 }
 type Request struct {

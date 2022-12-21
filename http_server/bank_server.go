@@ -5,10 +5,13 @@ import (
 	"TestBank/models"
 	"TestBank/utils"
 	"crypto/md5"
+	"encoding/hex"
+	"fmt"
 	"github.com/gin-gonic/gin"
 	"github.com/shopspring/decimal"
 	"github.com/sirupsen/logrus"
 	"net/http"
+	"sync"
 	"time"
 )
 
@@ -17,7 +20,8 @@ type BankServer struct {
 	Engine       *engine.BankEngine
 	logger       *logrus.Logger
 	queue        []models.TransactionInfo
-	processTimer *time.Timer
+	processTimer *time.Ticker
+	mutex        sync.Mutex
 }
 
 func (s *BankServer) auth(c *gin.Context) {
@@ -54,13 +58,18 @@ func NewBankServer() (*BankServer, error) {
 		Engine:       bankEngine,
 		logger:       logrus.New(),
 		queue:        make([]models.TransactionInfo, 0),
-		processTimer: time.NewTimer(time.Second),
+		processTimer: time.NewTicker(time.Second),
 	}
 	return &server, nil
 }
 
+func remove(slice []models.TransactionInfo, s int) []models.TransactionInfo {
+	return append(slice[:s], slice[s+1:]...)
+}
+
 func (s *BankServer) Run() error {
 	err := s.HttpEngine.Run(":8080")
+	s.processTimer.Reset(time.Second)
 	if err != nil {
 		return err
 	}
@@ -74,17 +83,23 @@ func (s *BankServer) processTransactions() {
 		}
 		select {
 		case <-s.processTimer.C:
-			prioritized, err := utils.Prioritize(s.queue, 1000)
+			copyQueue := s.queue[:]
+			fmt.Println(s.queue)
+			prioritized, err := utils.Prioritize(copyQueue, time.Second)
+			fmt.Println(prioritized)
 			if err != nil {
 				panic(err)
 			}
-			for _, tx := range prioritized {
+			s.mutex.Lock()
+			for i, tx := range prioritized {
 				ok, err := s.Engine.DbHelper.ExecuteTransaction(*tx.TransactionRef)
+				s.queue = remove(s.queue, i)
 				if err != nil || !ok {
 					s.logger.Error(err)
-					return
+					break
 				}
 			}
+			s.mutex.Unlock()
 			s.queue = make([]models.TransactionInfo, 0)
 		}
 	}
@@ -153,7 +168,7 @@ func (s *BankServer) SetRoutes() {
 		transaction.RResultBalance = rBalanceVal.Add(amountVal).String()
 		hashIn := md5.Sum([]byte(transaction.Recipient + transaction.Sender + transaction.Amount))
 		s.queue = append(s.queue, models.TransactionInfo{
-			ID:              string(hashIn[:]),
+			ID:              hex.EncodeToString(hashIn[:]),
 			Amount:          transaction.Amount,
 			BankName:        s.Engine.Users.UsersList[user].BankName,
 			BankCountryCode: s.Engine.Users.UsersList[user].BankCountryCode,

@@ -3,8 +3,8 @@ CREATE TABLE IF NOT EXISTS Users (
                                      password text,
                                      balance text,
                                      activity int,
-                                     bankCountryCode text,
-                                     bankName text
+                                     bank_country_code text,
+                                     bank_name text
 );
 CREATE TABLE IF NOT EXISTS Transactions(
                                            id serial NOT NULL PRIMARY KEY,
