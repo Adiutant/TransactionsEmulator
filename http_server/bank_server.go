@@ -85,12 +85,13 @@ func (s *BankServer) processTransactions() {
 		case <-s.processTimer.C:
 			copyQueue := s.queue[:]
 			fmt.Println(s.queue)
+			s.mutex.Lock()
 			prioritized, err := utils.Prioritize(copyQueue, time.Second)
+			s.queue = prioritized
 			fmt.Println(prioritized)
 			if err != nil {
 				panic(err)
 			}
-			s.mutex.Lock()
 			for i, tx := range prioritized {
 				ok, err := s.Engine.DbHelper.ExecuteTransaction(*tx.TransactionRef)
 				s.queue = remove(s.queue, i)
@@ -158,6 +159,10 @@ func (s *BankServer) SetRoutes() {
 			context.AbortWithStatus(http.StatusInternalServerError)
 			return
 
+		}
+		if recipientInfo.UserName == userInfo.UserName {
+			context.AbortWithStatus(http.StatusMethodNotAllowed)
+			return
 		}
 		if sBalanceVal.Sub(amountVal).LessThan(decimal.NewFromInt(0)) {
 			context.AbortWithStatus(http.StatusMethodNotAllowed)
